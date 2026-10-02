@@ -1,7 +1,8 @@
 """Local Upload Server - the desktop window.
 
-Dark theme, rounded widgets drawn on tkinter canvases (no extra packages), and
-the window itself: a settings screen and a running screen. The server runs on a
+Dark theme matching the other apps by Mattias (same colour tokens as the web
+apps), rounded widgets drawn on tkinter canvases (no extra packages), and the
+window itself: a settings screen and a running screen. The server runs on a
 background thread and reports events through a queue that the window reads on a timer.
 """
 
@@ -21,24 +22,28 @@ from server import (APP_NAME, DEFAULT_BASE, DEFAULT_PORT, MAX_PASSCODE_LEN, STAT
 # --------------------------------------------------------------------------
 # Theme
 # --------------------------------------------------------------------------
-# Palette: navy background with a red-pink brand accent
-C_BG = "#1a1a2e"            # window background
-C_PANEL = "#16213e"         # cards
-C_ACCENT = "#0f3460"        # secondary buttons, inner boxes, borders
-C_ACCENT_HOVER = "#1a4a8a"
-C_BRAND = "#e94560"         # title, primary button, switches
-C_BRAND_HOVER = "#c73050"
-C_TEXT = "#eaeaea"
-C_MUTED = "#888888"         # secondary text
-C_SOFT = "#aaaacc"          # hints on accent boxes, info lines in the log
-C_OK = "#55cc88"
-C_WARN = "#ffbb55"
-C_WARN_BG = "#2a1a0a"
-C_ERR = "#ff6666"
-C_STOP = "#6b2020"          # stop button
-C_STOP_HOVER = "#9b3030"
-C_OFF = "#2c3557"           # switch track when off
-C_DISABLED = "#252a40"      # disabled buttons and switches
+# Same tokens as the web apps' dark theme: dark grey background, a container
+# card, lighter inner boxes, and a green accent.
+C_BG = "#1e1e1e"            # window background
+C_PANEL = "#2d2d30"         # the main container card
+C_ENTRY = "#3c3c3c"         # boxes inside the container
+C_BORDER = "#444444"        # borders and dividers
+C_BUTTON = "#505050"        # secondary buttons, switch track when off
+C_BUTTON_HOVER = "#5a5a5a"
+C_BRAND = "#2ecc71"         # accent: title, primary button, switches
+C_BRAND_HOVER = "#25a35a"
+C_TEXT = "#ffffff"
+C_MUTED = "#b0bec5"         # secondary text
+C_SOFT = "#b0bec5"          # hints and info lines in the log
+C_OK = "#2ecc71"
+C_WARN = "#f1c40f"
+C_WARN_BG = "#302703"
+C_ERR = "#e74c3c"
+C_STOP = "#c0392b"          # stop button
+C_STOP_HOVER = "#9a2e22"
+C_OFF = C_BUTTON            # switch track when off
+C_DISABLED = "#3a3a3d"      # disabled buttons and switches
+C_DISABLED_FG = "#808080"   # text on disabled buttons
 
 SCALE = 1.0                 # screen scaling; 1.0 = 96 dpi
 F = {}                      # named fonts, filled in by build_fonts()
@@ -56,17 +61,18 @@ def build_fonts(root):
     families = set(tkfont.families(root))
     default_ui = tkfont.nametofont("TkDefaultFont").actual("family")
     default_mono = tkfont.nametofont("TkFixedFont").actual("family")
-    ui = next((f for f in ("Segoe UI", "SF Pro Text", "Helvetica Neue", "Ubuntu", "Noto Sans",
-                           "DejaVu Sans") if f in families), default_ui)
+    ui = next((f for f in ("Arial", "Helvetica", "Liberation Sans", "Arimo", "DejaVu Sans")
+               if f in families), default_ui)
     mono = next((f for f in ("Consolas", "Menlo", "DejaVu Sans Mono", "Courier New")
                  if f in families), default_mono)
     F.update({
         "title": (ui, -px(32), "bold"),
-        "head": (ui, -px(15), "bold"),
+        "subtitle": (ui, -px(17)),
+        "head": (ui, -px(16), "bold"),
         "body": (ui, -px(13)),
         "bold": (ui, -px(13), "bold"),
         "small": (ui, -px(11)),
-        "btn": (ui, -px(13)),
+        "btn": (ui, -px(13), "bold"),
         "btn_big": (ui, -px(15), "bold"),
         "addr": (mono, -px(21), "bold"),    # phone address
         "field": (mono, -px(15), "bold"),   # passcode and port
@@ -128,7 +134,7 @@ def pill(canvas, x1, y1, x2, y2, fill):
 class Card(tk.Frame):
     """A rounded panel. Put your widgets in card.inner."""
 
-    def __init__(self, parent, fill=C_PANEL, radius=12, pad=(20, 18)):
+    def __init__(self, parent, fill=C_ENTRY, radius=6, pad=(20, 18)):
         bg = parent.cget("bg")
         super().__init__(parent, bg=bg)
         self._fill = fill
@@ -148,13 +154,15 @@ class Card(tk.Frame):
 class Button(tk.Canvas):
     """A flat rounded button with a hover colour. Use fill=<background> plus outline= for a ghost button."""
 
-    def __init__(self, parent, text, command=None, width=150, height=36, fill=C_ACCENT,
-                 hover=C_ACCENT_HOVER, color=C_TEXT, outline=None, font=None, radius=8):
+    def __init__(self, parent, text, command=None, width=150, height=36, fill=C_BUTTON,
+                 hover=C_BUTTON_HOVER, color=C_TEXT, outline=None, font=None, radius=4):
         bg = parent.cget("bg")
         super().__init__(parent, width=px(width), height=px(height), bg=bg,
                          highlightthickness=0, bd=0, cursor="hand2")
         self._label = text
         self._command = command
+        if outline is None and fill == C_BUTTON:
+            outline = C_BORDER                      # grey buttons get the thin border the web ones have
         self._fill, self._hover, self._color, self._outline = fill, hover, color, outline
         self._font = font or F["btn"]
         self._radius = px(radius)
@@ -199,7 +207,7 @@ class Button(tk.Canvas):
         w = self.winfo_width() if self.winfo_width() > 4 else int(self["width"])
         h = self.winfo_height() if self.winfo_height() > 4 else int(self["height"])
         if not self._enabled:
-            fill, color, outline = C_DISABLED, C_MUTED, C_DISABLED
+            fill, color, outline = C_DISABLED, C_DISABLED_FG, C_DISABLED
         else:
             fill = self._hover if self._over else self._fill
             color = self._color
@@ -240,7 +248,7 @@ class Switch(tk.Frame):
         self._enabled = enabled
         cursor = "hand2" if enabled else "arrow"
         self._cv.configure(cursor=cursor)
-        self._lbl.configure(cursor=cursor, fg=C_TEXT if enabled else C_MUTED)
+        self._lbl.configure(cursor=cursor, fg=C_TEXT if enabled else C_DISABLED_FG)
         self._draw()
 
     def _draw(self):
@@ -251,12 +259,12 @@ class Switch(tk.Frame):
         if self._enabled:
             track = C_BRAND if on else C_OFF
         else:
-            track = "#7a3040" if on else C_DISABLED
+            track = "#1f6b3f" if on else C_DISABLED
         pill(cv, 0, 0, w - 1, h - 1, track)
         pad = px(3)
         d = h - 2 * pad
         x = w - pad - d if on else pad
-        cv.create_oval(x, pad, x + d, pad + d, fill=C_TEXT if self._enabled else C_MUTED, outline="")
+        cv.create_oval(x, pad, x + d, pad + d, fill=C_TEXT if self._enabled else C_DISABLED_FG, outline="")
 
 
 class Field(tk.Canvas):
@@ -272,9 +280,9 @@ class Field(tk.Canvas):
         self._focus = False
         self._enabled = True
         self.entry = tk.Entry(self, textvariable=variable, bd=0, highlightthickness=0,
-                              relief="flat", bg=C_BG, fg=C_TEXT, insertbackground=C_TEXT,
-                              disabledbackground=C_BG, disabledforeground=C_MUTED,
-                              selectbackground=C_ACCENT_HOVER, selectforeground=C_TEXT,
+                              relief="flat", bg=C_PANEL, fg=C_TEXT, insertbackground=C_TEXT,
+                              disabledbackground=C_PANEL, disabledforeground=C_DISABLED_FG,
+                              selectbackground=C_BUTTON_HOVER, selectforeground=C_TEXT,
                               font=font or F["body"], justify=justify)
         if max_len:
             def allowed(proposed):
@@ -296,8 +304,8 @@ class Field(tk.Canvas):
         if w < 4:
             return
         self.delete("bg")
-        border = C_BRAND if (self._focus and self._enabled) else C_ACCENT
-        round_rect(self, 1, 1, w - 1, h - 1, px(8), fill=C_BG, outline=border, width=1, tags="bg")
+        border = C_BRAND if (self._focus and self._enabled) else C_BORDER
+        round_rect(self, 1, 1, w - 1, h - 1, px(4), fill=C_PANEL, outline=border, width=1, tags="bg")
         self.tag_lower("bg")
         self.coords(self._win, px(12), h / 2)
         self.itemconfigure(self._win, width=max(10, w - px(24)))
@@ -322,9 +330,9 @@ class UploadApp:
         self.root.configure(bg=C_BG)
         build_fonts(self.root)
         room = self.root.winfo_screenheight() - px(90)
-        self.setup_height = min(px(510), room)
-        self.run_height = min(px(740), room)
-        self.root.geometry(f"{px(620)}x{self.setup_height}")
+        self.setup_height = min(px(600), room)
+        self.run_height = min(px(820), room)
+        self.root.geometry(f"{px(680)}x{self.setup_height}")
         dark_titlebar(self.root)
 
         self.queue = queue.Queue()      # log lines from server threads -> window
@@ -350,29 +358,34 @@ class UploadApp:
         name = "Dark.Vertical.TScrollbar"
         style.layout(name, [("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [
             ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
-        style.configure(name, troughcolor=C_BG, background=C_ACCENT, bordercolor=C_BG,
-                        lightcolor=C_ACCENT, darkcolor=C_ACCENT, relief="flat", width=px(9))
-        style.map(name, background=[("active", C_ACCENT_HOVER), ("pressed", C_ACCENT_HOVER)],
-                  lightcolor=[("active", C_ACCENT_HOVER)], darkcolor=[("active", C_ACCENT_HOVER)])
+        style.configure(name, troughcolor=C_PANEL, background=C_BUTTON, bordercolor=C_PANEL,
+                        lightcolor=C_BUTTON, darkcolor=C_BUTTON, relief="flat", width=px(9))
+        style.map(name, background=[("active", C_BUTTON_HOVER), ("pressed", C_BUTTON_HOVER)],
+                  lightcolor=[("active", C_BUTTON_HOVER)], darkcolor=[("active", C_BUTTON_HOVER)])
 
     def build(self):
-        """Header plus the two screens, stacked in one spot; show_page() raises one."""
+        """One container card (like the web apps) holding the header and the two screens;
+        show_page() raises one screen."""
         root = self.root
         root.grid_columnconfigure(0, weight=1)
-        root.grid_rowconfigure(1, weight=1)
+        root.grid_rowconfigure(0, weight=1)
 
-        head = tk.Frame(root, bg=C_BG)
-        head.grid(row=0, column=0, pady=(px(26), px(16)))
-        tk.Label(head, text=APP_NAME, font=F["title"], fg=C_BRAND, bg=C_BG).pack()
-        tk.Label(head, text="by Mattias  \u00b7  phone \u2192 PC over your Wi-Fi", font=F["small"],
-                 fg=C_MUTED, bg=C_BG).pack(pady=(px(2), 0))
+        container = Card(root, fill=C_PANEL, radius=8, pad=(20, 20))
+        container.grid(row=0, column=0, sticky="nsew", padx=px(20), pady=px(20))
+        inner = container.inner
 
-        body = tk.Frame(root, bg=C_BG)
-        body.grid(row=1, column=0, sticky="nsew", padx=px(28), pady=(0, px(22)))
+        # header: accent title, subtitle, and the divider line under it
+        tk.Label(inner, text=APP_NAME, font=F["title"], fg=C_BRAND, bg=C_PANEL).pack()
+        tk.Label(inner, text="by Mattias  \u00b7  phone \u2192 PC over your Wi-Fi", font=F["subtitle"],
+                 fg=C_TEXT, bg=C_PANEL).pack(pady=(px(6), px(14)))
+        tk.Frame(inner, bg=C_BORDER, height=px(2)).pack(fill="x", pady=(0, px(18)))
+
+        body = tk.Frame(inner, bg=C_PANEL)
+        body.pack(fill="both", expand=True)
         body.grid_columnconfigure(0, weight=1)
         body.grid_rowconfigure(0, weight=1)
-        self.page_setup = tk.Frame(body, bg=C_BG)
-        self.page_run = tk.Frame(body, bg=C_BG)
+        self.page_setup = tk.Frame(body, bg=C_PANEL)
+        self.page_run = tk.Frame(body, bg=C_PANEL)
         for page in (self.page_setup, self.page_run):
             page.grid(row=0, column=0, sticky="nsew")
         self.build_setup(self.page_setup)
@@ -385,23 +398,22 @@ class UploadApp:
         card.grid(row=0, column=0, sticky="ew")
         c = card.inner
 
-        tk.Label(c, text="Settings", font=F["head"], fg=C_TEXT, bg=C_PANEL, anchor="w").pack(fill="x")
+        tk.Label(c, text="Settings", font=F["head"], fg=C_BRAND, bg=C_ENTRY, anchor="w").pack(fill="x")
 
         # save folder
-        tk.Label(c, text="Save uploads to", font=F["small"], fg=C_MUTED, bg=C_PANEL,
+        tk.Label(c, text="Save uploads to", font=F["small"], fg=C_MUTED, bg=C_ENTRY,
                  anchor="w").pack(fill="x", pady=(px(16), px(5)))
-        row = tk.Frame(c, bg=C_PANEL)
+        row = tk.Frame(c, bg=C_ENTRY)
         row.pack(fill="x")
         self.f_dir = Field(row, self.var_dir)
         self.f_dir.pack(side="left", fill="x", expand=True)
         self.b_browse = Button(row, "Browse", self.browse, width=92, height=34)
         self.b_browse.pack(side="left", padx=(px(8), 0))
 
-
-        tk.Frame(c, bg=C_ACCENT, height=1).pack(fill="x", pady=px(18))   # divider
+        tk.Frame(c, bg=C_BORDER, height=1).pack(fill="x", pady=px(18))   # divider
 
         # passcode
-        passcoderow = tk.Frame(c, bg=C_PANEL)
+        passcoderow = tk.Frame(c, bg=C_ENTRY)
         passcoderow.pack(fill="x")
         self.sw_passcode = Switch(passcoderow, "Require passcode", self.var_use_passcode, command=self.update_passcode_widgets)
         self.sw_passcode.pack(side="left")
@@ -413,20 +425,20 @@ class UploadApp:
         self.f_passcode.pack(side="right", padx=(0, px(8)))
 
         # port
-        portrow = tk.Frame(c, bg=C_PANEL)
+        portrow = tk.Frame(c, bg=C_ENTRY)
         portrow.pack(fill="x", pady=(px(14), 0))
-        tk.Label(portrow, text="Port", font=F["body"], fg=C_TEXT, bg=C_PANEL).pack(side="left")
+        tk.Label(portrow, text="Port", font=F["body"], fg=C_TEXT, bg=C_ENTRY).pack(side="left")
         self.f_port = Field(portrow, self.var_port, width=92, font=F["field"], justify="center")
         self.f_port.pack(side="right")
 
         # start
         self.b_start = Button(page, "Start server  \u2192", self.start_server, width=240, height=46,
-                              fill=C_BRAND, hover=C_BRAND_HOVER, font=F["btn_big"], radius=10)
+                              fill=C_BRAND, hover=C_BRAND_HOVER, font=F["btn_big"])
         self.b_start.grid(row=1, column=0, pady=(px(26), px(8)))
-        self.lbl_fb = tk.Label(page, text="", font=F["small"], fg=C_ERR, bg=C_BG, wraplength=px(500))
+        self.lbl_fb = tk.Label(page, text="", font=F["small"], fg=C_ERR, bg=C_PANEL, wraplength=px(500))
         self.lbl_fb.grid(row=2, column=0)
         tk.Label(page, text="Only devices on your local network can connect.", font=F["small"],
-                 fg=C_MUTED, bg=C_BG).grid(row=3, column=0, pady=(px(4), 0))
+                 fg=C_MUTED, bg=C_PANEL).grid(row=3, column=0, pady=(px(4), 0))
 
     def build_run(self, page):
         """Running screen: phone address, passcode, live counter, activity log, Stop button."""
@@ -437,34 +449,34 @@ class UploadApp:
         status = Card(page)
         status.grid(row=0, column=0, sticky="ew")
         s = status.inner
-        top = tk.Frame(s, bg=C_PANEL)
+        top = tk.Frame(s, bg=C_ENTRY)
         top.pack(fill="x")
-        tk.Label(top, text="\u25cf Running", font=F["bold"], fg=C_OK, bg=C_PANEL).pack(side="left")
-        self.lbl_stats = tk.Label(top, text="", font=F["small"], fg=C_MUTED, bg=C_PANEL)
+        tk.Label(top, text="\u25cf Running", font=F["bold"], fg=C_OK, bg=C_ENTRY).pack(side="left")
+        self.lbl_stats = tk.Label(top, text="", font=F["small"], fg=C_MUTED, bg=C_ENTRY)
         self.lbl_stats.pack(side="right")
 
-        box = Card(s, fill=C_ACCENT, radius=8, pad=(16, 12))
+        box = Card(s, fill=C_PANEL, radius=6, pad=(16, 12))
         box.pack(fill="x", pady=(px(12), 0))
         b = box.inner
         tk.Label(b, text="On your phone (same Wi-Fi), open this address:", font=F["small"],
-                 fg=C_SOFT, bg=C_ACCENT, anchor="w").pack(fill="x")
-        arow = tk.Frame(b, bg=C_ACCENT)
+                 fg=C_SOFT, bg=C_PANEL, anchor="w").pack(fill="x")
+        arow = tk.Frame(b, bg=C_PANEL)
         arow.pack(fill="x", pady=(px(6), 0))
-        self.lbl_url = tk.Label(arow, text="", font=F["addr"], fg=C_TEXT, bg=C_ACCENT)
+        self.lbl_url = tk.Label(arow, text="", font=F["addr"], fg=C_TEXT, bg=C_PANEL)
         self.lbl_url.pack(side="left")
         self.b_copy = Button(arow, "Copy", self.copy_url, width=84, height=32,
                              fill=C_BRAND, hover=C_BRAND_HOVER)
         self.b_copy.pack(side="right")
 
         # passcode, or a warning when there is none (start_server() shows the right one)
-        self.passcode_row = tk.Frame(s, bg=C_PANEL)
-        tk.Label(self.passcode_row, text="Passcode", font=F["small"], fg=C_MUTED, bg=C_PANEL).pack(side="left")
-        self.lbl_passcode = tk.Label(self.passcode_row, text="", font=F["field"], fg=C_TEXT, bg=C_PANEL)
+        self.passcode_row = tk.Frame(s, bg=C_ENTRY)
+        tk.Label(self.passcode_row, text="Passcode", font=F["small"], fg=C_MUTED, bg=C_ENTRY).pack(side="left")
+        self.lbl_passcode = tk.Label(self.passcode_row, text="", font=F["field"], fg=C_TEXT, bg=C_ENTRY)
         self.lbl_passcode.pack(side="left", padx=(px(10), 0))
-        self.warn = Card(s, fill=C_WARN_BG, radius=8, pad=(14, 9))
+        self.warn = Card(s, fill=C_WARN_BG, radius=6, pad=(14, 9))
         tk.Label(self.warn.inner, text="No passcode - anyone on your network can upload.",
                  font=F["small"], fg=C_WARN, bg=C_WARN_BG, anchor="w").pack(fill="x")
-        self.lbl_dir = tk.Label(s, text="", font=F["small"], fg=C_MUTED, bg=C_PANEL, anchor="w",
+        self.lbl_dir = tk.Label(s, text="", font=F["small"], fg=C_MUTED, bg=C_ENTRY, anchor="w",
                                 justify="left", wraplength=px(500))
         self.lbl_dir.pack(fill="x", pady=(px(10), 0))
 
@@ -472,17 +484,17 @@ class UploadApp:
         act = Card(page)
         act.grid(row=1, column=0, sticky="nsew", pady=(px(12), 0))
         a = act.inner
-        ahead = tk.Frame(a, bg=C_PANEL)
+        ahead = tk.Frame(a, bg=C_ENTRY)
         ahead.pack(fill="x")
-        tk.Label(ahead, text="Activity", font=F["head"], fg=C_TEXT, bg=C_PANEL).pack(side="left")
-        Button(ahead, "Clear", self.clear_log, width=64, height=26, fill=C_PANEL,
-               hover=C_ACCENT, color=C_MUTED, font=F["small"]).pack(side="right")
-        wrap = Card(a, fill=C_BG, radius=8, pad=(8, 6))
+        tk.Label(ahead, text="Activity", font=F["head"], fg=C_BRAND, bg=C_ENTRY).pack(side="left")
+        Button(ahead, "Clear", self.clear_log, width=64, height=26, fill=C_ENTRY,
+               hover=C_BUTTON, color=C_MUTED, font=F["small"]).pack(side="right")
+        wrap = Card(a, fill=C_PANEL, radius=6, pad=(8, 6))
         wrap.pack(fill="both", expand=True, pady=(px(10), 0))
-        self.log_box = tk.Text(wrap.inner, bg=C_BG, fg=C_TEXT, font=F["mono"], bd=0,
+        self.log_box = tk.Text(wrap.inner, bg=C_PANEL, fg=C_TEXT, font=F["mono"], bd=0,
                                highlightthickness=0, relief="flat", wrap="word", state="disabled",
                                padx=px(6), pady=px(4), cursor="arrow", insertwidth=0,
-                               selectbackground=C_ACCENT, height=6)
+                               selectbackground=C_BUTTON, height=6)
         bar = ttk.Scrollbar(wrap.inner, orient="vertical", style="Dark.Vertical.TScrollbar",
                             command=self.log_box.yview)
         bar.pack(side="right", fill="y")
@@ -502,10 +514,10 @@ class UploadApp:
         self.log_box.tag_configure("info", foreground=C_SOFT)
 
         # buttons
-        foot = tk.Frame(page, bg=C_BG)
+        foot = tk.Frame(page, bg=C_PANEL)
         foot.grid(row=2, column=0, sticky="ew", pady=(px(14), 0))
-        Button(foot, "Open save folder", self.open_folder, width=160, height=40, fill=C_BG,
-               hover=C_ACCENT, color=C_MUTED, outline=C_MUTED).pack(side="left")
+        Button(foot, "Open save folder", self.open_folder, width=160, height=40, fill=C_PANEL,
+               hover=C_BUTTON, color=C_MUTED, outline=C_BORDER).pack(side="left")
         self.b_stop = Button(foot, "Stop server", self.stop_server, width=150, height=40,
                              fill=C_STOP, hover=C_STOP_HOVER)
         self.b_stop.pack(side="right")
@@ -516,8 +528,8 @@ class UploadApp:
         run = name == "run"
         (self.page_run if run else self.page_setup).tkraise()
         height = self.run_height if run else self.setup_height
-        width = self.root.winfo_width() if self.root.winfo_width() > 1 else px(620)
-        self.root.minsize(px(560), min(px(640 if run else 470), height))
+        width = self.root.winfo_width() if self.root.winfo_width() > 1 else px(680)
+        self.root.minsize(px(600), min(px(700 if run else 520), height))
         self.root.geometry(f"{width}x{height}")
 
     def browse(self):
